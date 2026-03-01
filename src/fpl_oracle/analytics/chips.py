@@ -155,7 +155,7 @@ async def analyze_wildcard() -> list[dict[str, Any]]:
     for t in teams:
         fixtures = await db.fetch_all(
             "SELECT f.event, "
-            "CASE WHEN f.team_h = $1 THEN f.team_a_difficulty ELSE f.team_h_difficulty END AS diff "
+            "CASE WHEN f.team_h = $1 THEN f.team_h_difficulty ELSE f.team_a_difficulty END AS diff "
             "FROM fixtures f "
             "WHERE (f.team_h = $1 OR f.team_a = $1) AND NOT f.finished "
             "ORDER BY f.event LIMIT 10",

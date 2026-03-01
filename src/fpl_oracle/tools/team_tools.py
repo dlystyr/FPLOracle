@@ -101,7 +101,7 @@ async def season_ticker(
         for f in fixtures:
             is_home = f["team_h"] == t["id"]
             # Overall difficulty
-            overall_diff = f["team_a_difficulty"] if is_home else f["team_h_difficulty"]
+            overall_diff = f["team_h_difficulty"] if is_home else f["team_a_difficulty"]
 
             # Get opponent's defensive/offensive strength for split analysis
             opp_scoring = await db.fetch_one(

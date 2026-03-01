@@ -59,7 +59,7 @@ async def captain_picks(
 
         next_fix = fixtures[0]
         is_home = next_fix["team_h"] == row["team_id"]
-        diff = next_fix.get("team_a_difficulty", 3) if is_home else next_fix.get("team_h_difficulty", 3)
+        diff = next_fix.get("team_h_difficulty", 3) if is_home else next_fix.get("team_a_difficulty", 3)
 
         # xP for next GW
         score_data = await scoring.score_player(

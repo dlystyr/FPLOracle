@@ -120,7 +120,7 @@ async def next_gw_picks(
         next_fix = fix[0]
         is_home = next_fix["team_h"] == row["team_id"]
         opp_name = next_fix["opp_name"]
-        diff = next_fix.get("team_a_difficulty", 3) if is_home else next_fix.get("team_h_difficulty", 3)
+        diff = next_fix.get("team_h_difficulty", 3) if is_home else next_fix.get("team_a_difficulty", 3)
 
         # Single-GW xPts
         xp_data = await xpts.calculate_expected_points(

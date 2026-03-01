@@ -42,7 +42,7 @@ async def team_fixture_outlook(
     total_diff = 0.0
     for f in fixtures:
         is_home = f["team_h"] == team_id
-        diff = f["team_h_difficulty"] if not is_home else f["team_a_difficulty"]
+        diff = f["team_h_difficulty"] if is_home else f["team_a_difficulty"]
         total_diff += diff
         items.append({
             "gw": f["event"],

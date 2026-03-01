@@ -73,7 +73,7 @@ async def team_xcs(team_id: int, num_fixtures: int = 5) -> list[dict[str, Any]]:
             opp_xga_rate = float(opp_scoring["avg_gf"])
         else:
             # Fallback: use FDR-based estimate
-            diff = fix["team_h_difficulty"] if not is_home else fix["team_a_difficulty"]
+            diff = fix["team_h_difficulty"] if is_home else fix["team_a_difficulty"]
             opp_xga_rate = 0.8 + (diff - 1) * 0.25  # FDR 1→0.8, FDR 5→1.8
 
         home_adj = 0.12 if is_home else -0.08
