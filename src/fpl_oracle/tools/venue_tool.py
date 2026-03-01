@@ -140,8 +140,8 @@ async def next_gw_picks(
         # Opponent form adjustment
         opp_id = next_fix["team_a"] if is_home else next_fix["team_h"]
         opp_form = await db.fetch_one(
-            "SELECT AVG(goals_against) AS avg_ga FROM team_results "
-            "WHERE team_id = $1 ORDER BY event DESC LIMIT 5",
+            "SELECT AVG(goals_against) AS avg_ga FROM "
+            "(SELECT goals_against FROM team_results WHERE team_id = $1 ORDER BY event DESC LIMIT 5) sub",
             opp_id,
         )
         # If opponent concedes a lot, boost; if tight, reduce

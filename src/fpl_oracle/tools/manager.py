@@ -38,15 +38,16 @@ def _player_ref_from_row(row: dict) -> PlayerRef:
 @mcp.tool()
 async def my_team(
     manager_id: Annotated[int, "FPL manager ID (find at fpl website URL)"],
+    gameweek: Annotated[int | None, "Specific GW to check (e.g. previous GW after a free hit). Omit for current."] = None,
 ) -> dict:
-    """Full analysis of an FPL team: squad, xPts, weaknesses, captain picks. Provide your FPL manager ID."""
+    """Full analysis of an FPL team: squad, xPts, weaknesses, captain picks. Use gameweek param to check a different GW (e.g. the GW before a free hit to see your actual squad)."""
     # Fetch manager info
     try:
         info = await fpl_api.manager_info(manager_id)
     except Exception:
         return {"error": f"Could not fetch manager {manager_id}"}
 
-    current_gw = await _get_current_gw()
+    current_gw = gameweek or await _get_current_gw()
 
     overview = ManagerOverview(
         manager_id=manager_id,
@@ -146,10 +147,11 @@ async def my_team(
 async def transfer_suggestions(
     manager_id: Annotated[int, "FPL manager ID"],
     position: Annotated[str | None, "Filter replacements: GK, DEF, MID, FWD"] = None,
+    gameweek: Annotated[int | None, "GW to fetch squad from (e.g. GW before free hit). Omit for current."] = None,
     limit: Annotated[int, "Max suggestions (default 5)"] = 5,
 ) -> list[dict]:
-    """Get transfer-in recommendations based on your team's weak spots."""
-    current_gw = await _get_current_gw()
+    """Get transfer-in recommendations based on your team's weak spots. Use gameweek param to base suggestions on a different GW's squad (e.g. pre-free-hit team)."""
+    current_gw = gameweek or await _get_current_gw()
 
     # Fetch current squad
     try:
@@ -269,3 +271,79 @@ async def transfer_suggestions(
             suggestions.append(suggestion.model_dump(exclude_none=True))
 
     return suggestions
+
+
+@mcp.tool()
+async def get_squad(
+    manager_id: Annotated[int, "FPL manager ID"],
+    gameweek: Annotated[int | None, "GW number to fetch. Omit for current GW."] = None,
+) -> dict:
+    """Get a manager's squad for any gameweek. Essential after free hit — use the previous GW to see your actual squad that reverts. Shows starting 11, bench, captain, chips played, and transfers made."""
+    gw = gameweek or await _get_current_gw()
+
+    try:
+        info = await fpl_api.manager_info(manager_id)
+    except Exception:
+        return {"error": f"Could not fetch manager {manager_id}"}
+
+    try:
+        picks_data = await fpl_api.manager_picks(manager_id, gw)
+    except Exception:
+        return {"error": f"Could not fetch picks for GW{gw}"}
+
+    if not picks_data or "picks" not in picks_data:
+        return {"error": f"No picks data for GW{gw}"}
+
+    picks = picks_data["picks"]
+    chip_played = picks_data.get("active_chip")
+    auto_subs = picks_data.get("automatic_subs", [])
+    entry_history = picks_data.get("entry_history", {})
+
+    squad: list[dict] = []
+    for pick in picks:
+        pid = pick["element"]
+        row = await db.fetch_one(
+            "SELECT p.id, p.web_name, t.short_name, p.element_type, "
+            "p.now_cost, p.form, p.status "
+            "FROM players p JOIN teams t ON p.team_id = t.id WHERE p.id = $1",
+            pid,
+        )
+        if not row:
+            squad.append({"id": pid, "name": "Unknown"})
+            continue
+
+        squad.append({
+            "id": row["id"],
+            "name": row["web_name"],
+            "team": row["short_name"],
+            "pos": POS_MAP.get(row["element_type"], "???"),
+            "price": round(row["now_cost"] / 10, 1),
+            "form": float(row.get("form", 0) or 0),
+            "starting": pick.get("multiplier", 0) > 0,
+            "captain": pick.get("is_captain", False),
+            "vice_captain": pick.get("is_vice_captain", False),
+            "multiplier": pick.get("multiplier", 1),
+        })
+
+    return {
+        "manager": f"{info.get('player_first_name', '')} {info.get('player_last_name', '')}".strip(),
+        "team_name": info.get("name", ""),
+        "gameweek": gw,
+        "chip_active": chip_played,
+        "squad": squad,
+        "points": entry_history.get("points"),
+        "total_points": entry_history.get("total_points"),
+        "overall_rank": entry_history.get("overall_rank"),
+        "bank": round((entry_history.get("bank", 0) or 0) / 10, 1),
+        "transfers_made": entry_history.get("event_transfers", 0),
+        "transfers_cost": entry_history.get("event_transfers_cost", 0),
+        "auto_subs": [
+            {"in": s.get("element_in"), "out": s.get("element_out")}
+            for s in auto_subs
+        ] if auto_subs else [],
+        "note": (
+            f"This is your GW{gw} squad"
+            + (f" (chip: {chip_played})" if chip_played else "")
+            + ". After a free hit, check the GW before to see your actual squad."
+        ),
+    }
