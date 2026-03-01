@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
     log_level: str = "INFO"
-    sync_interval: int = 21600  # 6 hours
+    sync_interval: int = 86400  # 24 hours
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

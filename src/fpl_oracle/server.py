@@ -71,11 +71,31 @@ from fpl_oracle.tools import ownership_tools  # noqa: E402, F401
 from fpl_oracle.tools import set_pieces  # noqa: E402, F401
 from fpl_oracle.tools import defensive  # noqa: E402, F401
 from fpl_oracle.tools import xcs_tool  # noqa: E402, F401
+from fpl_oracle.tools import squad_builder  # noqa: E402, F401
+from fpl_oracle.tools import venue_tool  # noqa: E402, F401
 
 
 @mcp.custom_route("/health", methods=["GET"])
 async def health(request):
     return JSONResponse({"status": "healthy", "server": "FPLOracle", "version": "1.0.0"})
+
+
+@mcp.custom_route("/sync", methods=["POST"])
+async def sync_endpoint(request):
+    """POST /sync — trigger a manual data sync."""
+    from fpl_oracle.sync import run_sync
+
+    result = await run_sync()
+    return JSONResponse(result)
+
+
+@mcp.tool()
+async def sync_data() -> dict:
+    """Manually trigger a full data sync from the FPL API into the database and cache. Use when you need the latest data."""
+    from fpl_oracle.sync import run_sync
+
+    log.info("manual_sync_triggered")
+    return await run_sync()
 
 
 async def _sync_loop():

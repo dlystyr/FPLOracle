@@ -6,10 +6,24 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Any
 
+from dateutil.parser import isoparse
+
 from fpl_oracle import db, cache, fpl_api
 from fpl_oracle.log import get_logger
 
 log = get_logger(__name__)
+
+
+def _parse_dt(val: Any) -> datetime | None:
+    """Parse a datetime string from the FPL API into a datetime object."""
+    if val is None:
+        return None
+    if isinstance(val, datetime):
+        return val
+    try:
+        return isoparse(str(val))
+    except (ValueError, TypeError):
+        return None
 
 
 async def run_sync() -> dict[str, Any]:
@@ -138,7 +152,7 @@ async def _sync_teams(teams: list[dict]) -> int:
 async def _sync_events(events: list[dict]) -> int:
     count = 0
     for e in events:
-        dl = e.get("deadline_time")
+        dl = _parse_dt(e.get("deadline_time"))
         await db.execute(
             "INSERT INTO events (id, name, deadline_time, finished, "
             "is_current, is_next, is_previous, "
@@ -226,7 +240,7 @@ async def _sync_players(players: list[dict]) -> int:
             p.get("starts", 0), p.get("status", "a"),
             p.get("chance_of_playing_next_round"),
             p.get("chance_of_playing_this_round"),
-            p.get("news"), p.get("news_added"),
+            p.get("news"), _parse_dt(p.get("news_added")),
         )
         count += 1
     return count
@@ -250,7 +264,7 @@ async def _sync_fixtures(fixtures: list[dict]) -> int:
             f["id"], f.get("code"), f.get("event"),
             f.get("team_h"), f.get("team_a"),
             f.get("team_h_score"), f.get("team_a_score"),
-            f.get("finished", False), f.get("kickoff_time"),
+            f.get("finished", False), _parse_dt(f.get("kickoff_time")),
             f.get("team_h_difficulty"), f.get("team_a_difficulty"),
         )
         count += 1
@@ -261,7 +275,7 @@ async def _sync_player_history(players: list[dict], current_gw: int) -> int:
     """Sync player history from element-summary endpoints."""
     count = 0
     # Only sync players with significant minutes to avoid excessive API calls
-    active = [p for p in players if (p.get("minutes", 0) or 0) >= 90]
+    active = [p for p in players if (p.get("minutes", 0) or 0) > 0]
 
     for p in active:
         try:

@@ -170,3 +170,60 @@ def nailed_score(player: dict[str, Any], recent_history: list[dict[str, Any]]) -
         score -= 15
 
     return max(0, min(100, score))
+
+
+async def rolling_xgi(player_id: int, window: int = 5) -> dict[str, Any]:
+    """Rolling xGI/90 over the last N gameweeks.
+
+    More predictive than FPL's form stat because it strips out luck
+    (uses expected goals + assists, not actual returns).
+    """
+    history = await db.fetch_all(
+        "SELECT event, expected_goals, expected_assists, minutes "
+        "FROM player_history WHERE player_id = $1 "
+        "ORDER BY event DESC LIMIT $2",
+        player_id, window,
+    )
+    if not history:
+        return {"xgi_per_90": 0.0, "xgi_total": 0.0, "games": 0, "minutes": 0}
+
+    total_xg = sum(float(h.get("expected_goals", 0) or 0) for h in history)
+    total_xa = sum(float(h.get("expected_assists", 0) or 0) for h in history)
+    total_mins = sum(h.get("minutes", 0) or 0 for h in history)
+    total_xgi = total_xg + total_xa
+
+    xgi_per_90 = (total_xgi / total_mins * 90) if total_mins >= 45 else 0.0
+
+    # Compare to season-long rate for trend
+    season = await db.fetch_one(
+        "SELECT SUM(expected_goals) AS xg, SUM(expected_assists) AS xa, "
+        "SUM(minutes) AS mins FROM player_history WHERE player_id = $1",
+        player_id,
+    )
+    season_xgi_per_90 = 0.0
+    if season and (season["mins"] or 0) >= 90:
+        s_xgi = float(season["xg"] or 0) + float(season["xa"] or 0)
+        season_xgi_per_90 = s_xgi / season["mins"] * 90
+
+    if season_xgi_per_90 > 0:
+        trend_ratio = xgi_per_90 / season_xgi_per_90
+        if trend_ratio > 1.2:
+            trend = "hot"
+        elif trend_ratio > 0.8:
+            trend = "steady"
+        else:
+            trend = "cold"
+    else:
+        trend = "unknown"
+
+    return {
+        "window": window,
+        "games": len(history),
+        "minutes": total_mins,
+        "xg": round(total_xg, 2),
+        "xa": round(total_xa, 2),
+        "xgi_total": round(total_xgi, 2),
+        "xgi_per_90": round(xgi_per_90, 3),
+        "season_xgi_per_90": round(season_xgi_per_90, 3),
+        "trend": trend,
+    }
